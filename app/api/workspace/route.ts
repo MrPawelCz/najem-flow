@@ -1,4 +1,4 @@
-import { getChatGPTUser } from "@/app/chatgpt-auth";
+import { adminUser } from "@/lib/admin-session";
 import {
   readWorkspace,
   initializeWorkspace,
@@ -9,23 +9,24 @@ import {
 import { applyAction } from "@/lib/operations";
 import { json, readJson, failure } from "@/lib/http";
 export const dynamic = "force-dynamic";
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const user = await getChatGPTUser();
-    if (!user) return json({ error: "Zaloguj się, aby otworzyć panel." }, 401);
-    return json({ state: await readWorkspace(user.userId) });
+    const userId = await adminUser(request);
+    if (!userId)
+      return json({ error: "Otwórz panel, aby rozpocząć sesję demo." }, 401);
+    return json({ state: await readWorkspace(userId) });
   } catch (e) {
     return failure(e);
   }
 }
 export async function POST(request: Request) {
   try {
-    const user = await getChatGPTUser();
-    if (!user) return json({ error: "Zaloguj się, aby zapisać zmiany." }, 401);
+    const userId = await adminUser(request);
+    if (!userId) return json({ error: "Sesja wygasła. Odśwież panel." }, 401);
     const input = await readJson(request);
     if (input.action === "initialize")
-      return json({ state: await initializeWorkspace(user.userId) });
-    const current = await readWorkspace(user.userId);
+      return json({ state: await initializeWorkspace(userId) });
+    const current = await readWorkspace(userId);
     if (!current) return json({ error: "Otwórz panel ponownie." }, 409);
     if (input.version !== current.version)
       return json(
@@ -48,14 +49,14 @@ export async function POST(request: Request) {
         )
         .bind(
           await hashToken(token),
-          user.userId,
+          userId,
           contractId,
           Date.now() + 7 * 86400000,
         )
         .run();
       signingPath = "/sign/" + token;
     }
-    await saveWorkspace(user.userId, state, current.version);
+    await saveWorkspace(userId, state, current.version);
     return json({ state, contractId, signingPath });
   } catch (e) {
     return failure(e);

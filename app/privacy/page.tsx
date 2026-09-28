@@ -4,50 +4,54 @@ export default function Privacy() {
       <a href="/" className="btn">
         ← Wróć do aplikacji
       </a>
-      <h1 className="mt-8">Prywatność i zakres wersji demo</h1>
+      <h1 className="mt-8">Prywatność i zakres demo</h1>
       <p>
-        Najem Flow to prototyp do testowania tworzenia i obiegu umów najmu. W
-        tej wersji należy używać wyłącznie fikcyjnych danych. Dane
-        demonstracyjne nie pochodzą z rzeczywistych mieszkań ani wcześniejszych
-        rozmów użytkownika.
+        Najem Flow służy do testowania tworzenia i podpisywania umów. Używaj
+        wyłącznie fikcyjnych danych. Przykłady nie pochodzą z rzeczywistych
+        mieszkań ani wcześniejszych rozmów.
       </p>
-      <h2>Logowanie i przechowywanie</h2>
+      <h2>Wspólne konto administratora</h2>
       <p>
-        Logowanie odbywa się przez ChatGPT. Dane mieszkań, osób, warunki umów i
-        historia symulacji są przechowywane w bazie przypisanej do stabilnego
-        identyfikatora zalogowanego użytkownika. Każde konto ma własną
-        przestrzeń. Aplikacja nie pobiera ani nie zapisuje hasła do ChatGPT.
-        Identyfikator konta nie jest automatycznie przepisywany do danych
-        wynajmującego.
+        Login admin i hasło admin są publicznymi danymi demonstracyjnymi.
+        Wszyscy zalogowani nimi użytkownicy widzą i mogą edytować ten sam panel,
+        mieszkania, umowy i własne wzory. Konto ChatGPT nie jest potrzebne.
+        Poprzednie przestrzenie kont nie zostały połączone z tą przestrzenią.
       </p>
       <p>
-        Publiczny podgląd pokazuje tylko fikcyjne przykłady. Link najemcy jest
-        tajnym adresem ważnym przez 7 dni, który udostępnia treść konkretnej
-        umowy każdemu posiadaczowi linku. Nie wklejaj takich linków w
-        publicznych miejscach. Anulowanie obiegu blokuje linki. Wersja demo nie
-        wysyła danych do Autenti ani innych dostawców podpisu.
+        Dane zapisują się w bazie Cloudflare D1. Niezbędne cookie nf_admin
+        przechowuje losowy identyfikator sesji przez 24 godziny. Wylogowanie
+        unieważnia tę sesję na serwerze. Usunięcie cookie lub wylogowanie nie
+        usuwa danych wspólnego panelu. Kod w publicznym repozytorium GitHub nie
+        zawiera zawartości bazy ani zapisanych umów.
       </p>
-      <h2>Co oznacza podpis w tej wersji</h2>
+      <h2>Link najemcy</h2>
       <p>
-        Wszystkie podpisy są symulowane. Status „Aktywna” oznacza ukończony
-        demonstracyjny obieg i trwający okres najmu, a nie potwierdzenie prawnej
-        skuteczności umowy. Każdy PDF jest oznaczony jako demo i nie zawiera
-        podpisu kryptograficznego. Lista kontrolna załączników jest notatką
-        użytkownika.
+        Link ważny przez 7 dni udostępnia jedną konkretną umowę każdej osobie,
+        która zna adres. Nie daje dostępu do panelu admina. Najemca nie
+        potrzebuje konta ani hasła. Anulowanie obiegu unieważnia linki. Nie
+        publikuj tych linków w publicznych miejscach. Aplikacja nie wysyła
+        e-maili ani danych do Autenti.
       </p>
-      <h2>Przed uruchomieniem rzeczywistej usługi</h2>
+      <h2>Wzory i podpisy</h2>
       <p>
-        Potrzebne są: zweryfikowane prawnie wzory, rzeczywista integracja
-        podpisów i walidacja podpisanego PDF, ustalenie administratora danych
-        oraz podstaw przetwarzania, umowy powierzenia z dostawcami, okresy
-        retencji, mechanizmy usunięcia i eksportu danych, kopie bezpieczeństwa i
-        audyt bezpieczeństwa. Obecna informacja opisuje prototyp; nie jest
-        polityką prywatności gotowej usługi komercyjnej.
+        Własne wzory, dane umów i historia symulacji są zapisywane na serwerze.
+        Edycja wzoru nie aktualizuje zapisanych umów. Podpisy są wyłącznie
+        symulacją. Status „Aktywna” oznacza zakończony obieg demo i trwający
+        okres najmu. PDF nie zawiera podpisów kryptograficznych, a checklista
+        nie potwierdza doręczenia załączników.
+      </p>
+      <h2>Przed rzeczywistym użyciem</h2>
+      <p>
+        Potrzebne są indywidualne konta z odpowiednią ochroną, prawna
+        weryfikacja wzorów, rzeczywista integracja podpisu, określenie
+        administratora danych, podstaw przetwarzania i okresów przechowywania,
+        obsługa usuwania i eksportu oraz kopie bezpieczeństwa. Obecna informacja
+        opisuje demonstrację, a nie gotową usługę do obsługi danych osobowych.
       </p>
       <p>
-        Aplikacja zgłasza wyszukiwarkom zakaz indeksowania. To nie jest kontrola
-        dostępu ani gwarancja ukrycia adresu. Prywatne repozytorium GitHub jest
-        oddzielone od dostępu do działającej aplikacji.
+        Zakaz indeksowania zgłaszany wyszukiwarkom nie gwarantuje ukrycia
+        adresu. Repozytorium GitHub i działająca aplikacja mają osobne zasady
+        dostępu.
       </p>
     </main>
   );

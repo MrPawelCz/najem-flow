@@ -21,6 +21,8 @@ import {
   personSchema,
   termsSchema,
   today,
+  detailedDefaults,
+  TEMPLATE_VERSION,
   type Workspace,
   type Property,
   type Person,
@@ -332,6 +334,9 @@ export function ContractWizard({
   onAdd: (kind: "property" | "owner" | "tenant") => void;
 }) {
   const base = initial ?? renewal;
+  const [templateId, setTemplateId] = useState(
+    base?.templateSnapshot?.id ?? "standard",
+  );
   const [step, setStep] = useState(0);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -339,7 +344,7 @@ export function ContractWizard({
   const [ownerId, setOwner] = useState(base?.owner.id ?? "");
   const [tenantId, setTenant] = useState(base?.tenant.id ?? "");
   const [terms, setTerms] = useState<Terms>(() => {
-    if (initial) return initial.terms;
+    if (initial) return { ...detailedDefaults, ...initial.terms };
     const start = renewal
       ? new Date(new Date(renewal.terms.end).getTime() + 86400000)
           .toISOString()
@@ -349,6 +354,7 @@ export function ContractWizard({
     end.setUTCFullYear(end.getUTCFullYear() + 1);
     end.setUTCDate(end.getUTCDate() - 1);
     return {
+      ...detailedDefaults,
       ...(renewal?.terms ?? {
         kind: "ordinary",
         rent: 0,
@@ -374,6 +380,9 @@ export function ContractWizard({
   const property = data.properties.find((p) => p.id === propertyId),
     owner = data.people.find((p) => p.id === ownerId),
     tenant = data.people.find((p) => p.id === tenantId);
+  const selectedTemplate = data.templates?.find(
+    (t) => t.id === templateId && t.kind === terms.kind,
+  );
   const preview: Contract | undefined =
     property && owner && tenant
       ? {
@@ -388,6 +397,8 @@ export function ContractWizard({
           events: [],
           checklist: {},
           demo: true,
+          templateVersion: TEMPLATE_VERSION,
+          templateSnapshot: selectedTemplate,
         }
       : undefined;
   const input = (
@@ -438,6 +449,7 @@ export function ContractWizard({
         tenantId,
         terms,
         renewalOf: renewal?.id ?? initial?.renewalOf,
+        templateId: selectedTemplate?.id,
       });
       onClose();
     } catch (e) {
@@ -531,18 +543,37 @@ export function ContractWizard({
                 <Choice
                   label="Rodzaj umowy"
                   value={terms.kind}
-                  onChange={(v) =>
+                  onChange={(v) => {
+                    setTemplateId("standard");
                     setTerms((p) => ({
                       ...p,
                       kind: v as Terms["kind"],
                       signature: v === "occasional" ? "qes" : p.signature,
-                    }))
-                  }
+                    }));
+                  }}
                   options={[
                     ["ordinary", "Zwykła umowa najmu"],
                     ["occasional", "Najem okazjonalny"],
                   ]}
                 />
+                <Choice
+                  label="Wzór umowy"
+                  value={selectedTemplate?.id ?? "standard"}
+                  onChange={setTemplateId}
+                  options={[
+                    ["standard", "Standardowy — pełny wzór (11 paragrafów)"],
+                    ...(data.templates ?? [])
+                      .filter((t) => t.kind === terms.kind)
+                      .map((t) => [t.id, t.name] as [string, string]),
+                  ]}
+                />
+                {selectedTemplate && (
+                  <div className="notice field full">
+                    Używasz własnego wzoru „{selectedTemplate.name}”. Tylko pola
+                    zapisane w jego treści będą uzupełnione. Sprawdź podgląd
+                    przed podpisywaniem.
+                  </div>
+                )}
                 <Choice
                   label="Docelowy rodzaj podpisu"
                   value={terms.signature}
@@ -564,7 +595,29 @@ export function ContractWizard({
                 {input("fees", "Zaliczka na opłaty (zł)", "number")}
                 {input("deposit", "Kaucja (zł)", "number")}
                 {input("paymentDay", "Dzień płatności (1–28)", "number")}
+                {input(
+                  "discount",
+                  "Rabat za terminową wpłatę (zł, 0 = brak)",
+                  "number",
+                )}
+                {terms.discount > 0 &&
+                  input(
+                    "discountDay",
+                    "Dzień uprawniający do rabatu (1–28)",
+                    "number",
+                  )}
+                {input(
+                  "inspectionMonths",
+                  "Przegląd lokalu co ile miesięcy",
+                  "number",
+                )}
+                {input("returnTime", "Godzina zwrotu w ostatnim dniu", "time")}
                 {input("occupants", "Osoby zamieszkujące", "text", true)}
+                <div className="notice info field full">
+                  {terms.kind === "ordinary"
+                    ? "W zwykłym najmie czynsz obejmuje koszty administracji, części wspólnych i podatek. Zaliczka dotyczy mediów."
+                    : "W najmie okazjonalnym zaliczka obejmuje uzgodnione opłaty administratora i media, z rozliczeniem rzeczywistych kosztów."}
+                </div>
                 {terms.kind === "occasional" && (
                   <>
                     <div className="notice field full">
@@ -598,6 +651,43 @@ export function ContractWizard({
               >
                 Wymagaj polisy OC najemcy.
               </Check>
+              {terms.insurance && (
+                <div className="form-grid">
+                  {input(
+                    "insuranceSum",
+                    "Minimalna suma OC najemcy (zł)",
+                    "number",
+                  )}
+                </div>
+              )}
+              <Check
+                checked={terms.petsAllowed}
+                onChange={(v) => update("petsAllowed", v)}
+              >
+                Zezwól na zwierzęta domowe.
+              </Check>
+              <Check
+                checked={terms.smokingAllowed}
+                onChange={(v) => update("smokingAllowed", v)}
+              >
+                Zezwól na palenie w lokalu, z poszanowaniem porządku domowego.
+              </Check>
+              <Check
+                checked={terms.spareKeys}
+                onChange={(v) => update("spareKeys", v)}
+              >
+                Wynajmujący zachowuje zapasowy komplet kluczy. Wejście wymaga
+                zgody lub ustawowej podstawy.
+              </Check>
+              {terms.kind === "occasional" && (
+                <Check
+                  checked={terms.notarialConsent}
+                  onChange={(v) => update("notarialConsent", v)}
+                >
+                  Wymagaj notarialnego poświadczenia podpisu pod zgodą na
+                  zamieszkanie w innym lokalu.
+                </Check>
+              )}
               <div className="notice info">
                 Zwykły podpis elektroniczny może zachować formę dokumentową.
                 Przy najmie dłuższym niż rok brak formy pisemnej wpływa na
@@ -609,8 +699,9 @@ export function ContractWizard({
             <>
               <div className="notice mb-4">
                 <FileCheck2 size={17} className="inline mr-2" />
-                Sprawdź treść przed zapisaniem. To uproszczony projekt oparty na
-                dostarczonym wzorze; wymaga oceny przed rzeczywistym użyciem.
+                Sprawdź pełny projekt: 11 paragrafów na podstawie dostarczonego
+                wzoru. Przed rzeczywistym użyciem wymaga oceny prawnej. Edycja
+                szkicu zapisuje aktualną wersję szablonu.
               </div>
               <DocumentPreview contract={preview} />
             </>

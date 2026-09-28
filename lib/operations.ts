@@ -6,9 +6,13 @@ import {
   type Workspace,
   type Contract,
   today,
+  TEMPLATE_VERSION,
+  agreementTemplateSchema,
 } from "./model";
+import { validateTemplateBody } from "./templates";
 const id = z.string().min(1).max(100);
 export const actionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("template"), data: agreementTemplateSchema }),
   z.object({ action: z.literal("property"), data: propertySchema }),
   z.object({ action: z.literal("person"), data: personSchema }),
   z.object({
@@ -19,6 +23,7 @@ export const actionSchema = z.discriminatedUnion("action", [
     tenantId: id,
     terms: termsSchema,
     renewalOf: id.optional(),
+    templateId: id.optional(),
   }),
   z.object({ action: z.literal("owner-sign"), id }),
   z.object({ action: z.literal("invite"), id }),
@@ -52,7 +57,21 @@ export function applyAction(
     state.contracts.length > 500
   )
     throw new Error("Osiągnięto limit pierwszej wersji.");
-  if (a.action === "property" || a.action === "person") {
+  if (a.action === "template") {
+    validateTemplateBody(a.data.body);
+    state.templates ??= [];
+    const i = state.templates.findIndex((t) => t.id === a.data.id);
+    if (a.data.id && i < 0) throw new Error("Nie znaleziono wzoru.");
+    if (i < 0 && state.templates.length >= 30)
+      throw new Error("Osiągnięto limit 30 własnych wzorów.");
+    const template = {
+      ...a.data,
+      id: i < 0 ? crypto.randomUUID() : a.data.id,
+      updatedAt: new Date().toISOString(),
+    };
+    if (i < 0) state.templates.push(template);
+    else state.templates[i] = template;
+  } else if (a.action === "property" || a.action === "person") {
     const list = a.action === "property" ? state.properties : state.people;
     const i = list.findIndex((p) => p.id === a.data.id);
     const p = { ...a.data, id: i < 0 ? crypto.randomUUID() : a.data.id };
@@ -84,6 +103,13 @@ export function applyAction(
       ? state.contracts.find((c) => c.id === a.id)
       : undefined;
     if (a.id && !existing) throw new Error("Nie znaleziono umowy.");
+    const template = a.templateId
+      ? state.templates?.find((t) => t.id === a.templateId)
+      : undefined;
+    if (a.templateId && !template)
+      throw new Error("Nie znaleziono wybranego wzoru.");
+    if (template && template.kind !== a.terms.kind)
+      throw new Error("Nie można użyć tego wzoru dla wybranego rodzaju najmu.");
     if (existing && existing.status !== "draft")
       throw new Error(
         "Po rozpoczęciu podpisywania treść jest zablokowana. Utwórz nowy szkic.",
@@ -121,6 +147,8 @@ export function applyAction(
       ],
       checklist: existing?.checklist ?? {},
       demo: true,
+      templateVersion: TEMPLATE_VERSION,
+      templateSnapshot: template ? structuredClone(template) : undefined,
       renewalOf: a.renewalOf ?? existing?.renewalOf,
     };
     if (existing) state.contracts[state.contracts.indexOf(existing)] = c;

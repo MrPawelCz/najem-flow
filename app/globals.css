@@ -745,6 +745,9 @@ h3 {
   grid-template-columns: 1fr 1fr;
   background: white;
 }
+.template-tools { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin: 18px 0; }
+.template-tools .field { flex: 1; min-width: 240px; }
+.template-source { min-height: 420px; font-family: ui-monospace, monospace; font-size: 13px; line-height: 1.65; resize: vertical; }
 .login-art {
   background: #103441;
   color: white;

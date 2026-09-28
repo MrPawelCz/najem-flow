@@ -14,8 +14,6 @@ import {
   Wallet,
   CircleCheck,
   Home,
-  LogIn,
-  LogOut,
   Search,
   RefreshCw,
   Pencil,
@@ -50,14 +48,21 @@ import {
   type Workspace,
   type Person,
   type Property,
+  type AgreementTemplate,
+  type Terms,
 } from "@/lib/model";
 import { EntityDialog, ContractWizard } from "./forms";
 import ContractDetail from "./contract-detail";
+import { TemplatesPanel, TemplateEditor } from "./templates-panel";
 
-export default function Dashboard({ demo = true }: { demo?: boolean }) {
+export default function Dashboard() {
+  const [templateEditor, setTemplateEditor] = useState<{
+    initial?: AgreementTemplate;
+    kind?: Terms["kind"];
+  } | null>(null);
   const [view, setView] = useState("Przegląd"),
     [data, setData] = useState<Workspace>(seed),
-    [loading, setLoading] = useState(!demo),
+    [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [search, setSearch] = useState(""),
     [filter, setFilter] = useState("all");
@@ -81,26 +86,25 @@ export default function Dashboard({ demo = true }: { demo?: boolean }) {
     ["Przegląd", LayoutDashboard],
     ["Mieszkania", Building2],
     ["Umowy", FileText],
+    ["Wzory umów", Pencil],
     ["Osoby", Users],
     ["Podpisy i integracje", Plug],
   ] as const;
   async function load() {
-    if (demo) return;
     setLoading(true);
     setError("");
     try {
-      let response = await fetch("/api/workspace");
-      let result: any = await response.json();
-      if (!response.ok) throw new Error(result.error);
-      if (!result.state) {
-        response = await fetch("/api/workspace", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "initialize" }),
-        });
-        result = await response.json();
-        if (!response.ok) throw new Error(result.error);
+      const response = await fetch("/api/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const result: any = await response.json();
+      if (response.status === 401) {
+        window.location.assign("/login");
+        return;
       }
+      if (!response.ok) throw new Error(result.error);
       setData(result.state);
     } catch (e) {
       setError((e as Error).message);
@@ -110,7 +114,7 @@ export default function Dashboard({ demo = true }: { demo?: boolean }) {
   }
   useEffect(() => {
     void load();
-  }, [demo]);
+  }, []);
   useEffect(() => {
     const d = document as Document & {
       modelContext?: {
@@ -138,6 +142,7 @@ export default function Dashboard({ demo = true }: { demo?: boolean }) {
                   "Przegląd",
                   "Mieszkania",
                   "Umowy",
+                  "Wzory umów",
                   "Osoby",
                   "Podpisy i integracje",
                 ],
@@ -162,17 +167,13 @@ export default function Dashboard({ demo = true }: { demo?: boolean }) {
     return () => controller.abort();
   }, []);
   function guarded(fn: () => void) {
-    if (demo) {
-      toast.info(
-        "Zaloguj się przez przycisk w prawym górnym rogu, aby zapisywać dane i testować podpisy.",
-      );
+    if (loading || error) {
+      toast.info("Poczekaj na wczytanie przestrzeni demo lub odśwież dane.");
       return;
     }
     fn();
   }
   async function action(input: unknown) {
-    if (demo)
-      throw new Error("Zaloguj się, aby przećwiczyć obieg na swoim koncie.");
     const response = await fetch("/api/workspace", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -274,7 +275,7 @@ export default function Dashboard({ demo = true }: { demo?: boolean }) {
           <div className="flex items-center gap-3 pt-5">
             <span className="avatar">NF</span>
             <div className="small">
-              {demo ? "Przestrzeń demo" : "Twoja przestrzeń"}
+              Administrator
               <p className="text-xs text-slate-400">Panel wynajmującego</p>
             </div>
           </div>
@@ -290,7 +291,7 @@ export default function Dashboard({ demo = true }: { demo?: boolean }) {
           </div>
           <div className="top-actions">
             <span className="demo-pill">Podpisy w trybie demo</span>
-            {!demo && (
+            {
               <button
                 aria-label="Odśwież dane"
                 className="btn"
@@ -299,15 +300,25 @@ export default function Dashboard({ demo = true }: { demo?: boolean }) {
               >
                 <RefreshCw size={16} />
               </button>
-            )}
-            <a
+            }
+            <button
               className="btn"
-              target="_top"
-              href={demo ? "/login" : "/signout-with-chatgpt?return_to=%2F"}
+              onClick={async () => {
+                try {
+                  const r = await fetch("/api/session", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "logout" }),
+                  });
+                  if (!r.ok) throw new Error();
+                  window.location.assign("/login");
+                } catch {
+                  toast.error("Nie udało się wylogować. Spróbuj ponownie.");
+                }
+              }}
             >
-              {demo ? <LogIn size={16} /> : <LogOut size={16} />}{" "}
-              {demo ? "Zaloguj się" : "Wyloguj"}
-            </a>
+              Wyloguj
+            </button>
           </div>
         </header>
         <main className="workspace">
@@ -322,6 +333,8 @@ export default function Dashboard({ demo = true }: { demo?: boolean }) {
                         "Mieszkania, umowy i podpisy. Wszystko w swoim miejscu.",
                       Mieszkania: "Twoje lokale, gotowe do kolejnej umowy.",
                       Umowy: "Od pierwszego szkicu do przekazania kluczy.",
+                      "Wzory umów":
+                        "Twoja treść umowy, dopasowana do rodzaju najmu.",
                       Osoby: "Dane stron dostępne przy tworzeniu każdej umowy.",
                       "Podpisy i integracje":
                         "Przećwicz obieg, a potem podłącz wybranego dostawcę.",
@@ -333,39 +346,31 @@ export default function Dashboard({ demo = true }: { demo?: boolean }) {
             <button
               className="btn primary"
               onClick={
-                view === "Mieszkania"
-                  ? () => guarded(() => setEntity({ kind: "property" }))
-                  : view === "Osoby"
-                    ? () => guarded(() => setEntity({ kind: "tenant" }))
-                    : newContract
+                view === "Wzory umów"
+                  ? () => guarded(() => setTemplateEditor({}))
+                  : view === "Mieszkania"
+                    ? () => guarded(() => setEntity({ kind: "property" }))
+                    : view === "Osoby"
+                      ? () => guarded(() => setEntity({ kind: "tenant" }))
+                      : newContract
               }
             >
               <Plus />
-              {view === "Mieszkania"
-                ? "Dodaj mieszkanie"
-                : view === "Osoby"
-                  ? "Dodaj najemcę"
-                  : "Nowa umowa"}
+              {view === "Wzory umów"
+                ? "Dodaj wzór"
+                : view === "Mieszkania"
+                  ? "Dodaj mieszkanie"
+                  : view === "Osoby"
+                    ? "Dodaj najemcę"
+                    : "Nowa umowa"}
             </button>
           </div>
-          {demo ? (
+          {
             <div className="intro-strip">
               <p>
                 <ShieldCheck size={18} />
-                Poznaj panel na fikcyjnych danych. Zaloguj się, aby zapisywać
-                własne zmiany.
-              </p>
-              <a href="/login" className="btn ghost">
-                Otwórz swój panel
-                <ArrowUpRight size={16} />
-              </a>
-            </div>
-          ) : (
-            <div className="intro-strip">
-              <p>
-                <ShieldCheck size={18} />
-                Wersja testowa · Dane zapisują się na Twoim koncie. Używaj
-                wyłącznie fikcyjnych danych.
+                Wspólny panel demo · Wszyscy zalogowani jako admin widzą te same
+                dane. Używaj wyłącznie fikcyjnych danych.
               </p>
               <button
                 className="btn ghost"
@@ -375,7 +380,7 @@ export default function Dashboard({ demo = true }: { demo?: boolean }) {
                 <ArrowUpRight size={16} />
               </button>
             </div>
-          )}
+          }
           {error && (
             <div role="alert" className="error">
               {error}{" "}
@@ -740,6 +745,14 @@ export default function Dashboard({ demo = true }: { demo?: boolean }) {
                   </>
                 )}
                 {view === "Podpisy i integracje" && <Integrations />}
+                {view === "Wzory umów" && (
+                  <TemplatesPanel
+                    templates={data.templates ?? []}
+                    onEdit={(initial, kind) =>
+                      guarded(() => setTemplateEditor({ initial, kind }))
+                    }
+                  />
+                )}
               </>
             )
           )}
@@ -751,6 +764,14 @@ export default function Dashboard({ demo = true }: { demo?: boolean }) {
           </p>
         </main>
       </SidebarInset>
+      {templateEditor && (
+        <TemplateEditor
+          initial={templateEditor.initial}
+          kind={templateEditor.kind}
+          onClose={() => setTemplateEditor(null)}
+          onSave={action}
+        />
+      )}
       {entity && (
         <EntityDialog
           kind={entity.kind}
@@ -782,7 +803,7 @@ export default function Dashboard({ demo = true }: { demo?: boolean }) {
         <ContractDetail
           key={contract.id}
           contract={contract}
-          demo={demo}
+          demo={false}
           onClose={() => setSelected(null)}
           onAction={action}
           onEdit={() => guarded(() => setWizard({ initial: contract }))}

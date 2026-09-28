@@ -1,58 +1,89 @@
-import { Home, ArrowRight, ShieldCheck } from "lucide-react";
-import { getChatGPTUser, chatGPTSignInPath } from "../chatgpt-auth";
-import { redirect } from "next/navigation";
-export const dynamic = "force-dynamic";
-export default async function Login() {
-  const user = await getChatGPTUser();
-  if (user) redirect("/app");
+"use client";
+import { useState } from "react";
+import { Building2, ArrowRight } from "lucide-react";
+export default function Login() {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function login(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const r = await fetch("/api/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const result = (await r.json()) as { error?: string };
+      if (!r.ok) throw new Error(result.error);
+      window.location.assign("/");
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  }
   return (
     <main className="login-wrap">
       <section className="login-art">
-        <div className="brand">
-          <span className="brandmark">
-            <Home />
-          </span>
-          najem<small>flow</small>
-        </div>
-        <div>
-          <h1>
-            Dobre umowy.
-            <br />
-            Spokojny najem.
-          </h1>
-          <p>
-            Uporządkuj mieszkania, przygotuj dokumenty i miej cały proces pod
-            kontrolą.
-          </p>
-        </div>
-        <p className="small">Panel dla wynajmujących</p>
+        <a className="brand" href="/">
+          <Building2 />
+          Najem Flow
+        </a>
+        <h1>
+          Od mieszkania
+          <br />
+          do podpisanej umowy.
+        </h1>
+        <p>Twoje mieszkania, własne wzory i cały obieg umów w jednym panelu.</p>
       </section>
       <section className="login-form">
         <div>
-          <ShieldCheck size={32} color="#147d6b" />
-          <h1 className="mt-6">Twoja przestrzeń najmu</h1>
-          <p className="muted">
-            Zaloguj się, aby zapisywać mieszkania, osoby i umowy na swoim
-            koncie.
+          <span className="eyebrow">PANEL WYNAJMUJĄCEGO</span>
+          <h1>Witaj ponownie</h1>
+          <p className="muted mb-6">
+            Zaloguj się do wspólnej przestrzeni demonstracyjnej.
           </p>
-          <a
-            className="btn primary"
-            target="_top"
-            href={chatGPTSignInPath("/app")}
-          >
-            Zaloguj się przez ChatGPT
-            <ArrowRight size={17} />
-          </a>
-          <a className="btn" href="/">
-            Zobacz demo bez logowania
-          </a>
+          <form onSubmit={login}>
+            <label className="field">
+              <span>Login</span>
+              <input
+                autoComplete="username"
+                autoFocus
+                required
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+              />
+            </label>
+            <label className="field mt-4">
+              <span>Hasło</span>
+              <input
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </label>
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
+            <button className="btn primary mt-6" disabled={busy}>
+              {busy ? "Logowanie…" : "Otwórz panel"}
+              <ArrowRight size={18} />
+            </button>
+          </form>
+          <div className="notice info mt-6">
+            Dostęp demo: <strong>admin / admin</strong>.<br />
+            Wszyscy administratorzy widzą te same dane testowe.
+          </div>
           <small>
-            Każde konto ma oddzielne dane. Pierwsza wersja korzysta z logowania
-            ChatGPT. Demo obiegu podpisów nie zawiera podpisu elektronicznego.
+            Najemca korzysta z osobnego linku do konkretnej umowy i nie
+            potrzebuje tych danych logowania. Podpisy w tej wersji są symulacją.
           </small>
-          <a className="btn ghost" href="/privacy">
-            Prywatność i ograniczenia wersji
-          </a>
         </div>
       </section>
     </main>

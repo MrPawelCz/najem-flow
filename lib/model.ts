@@ -1,4 +1,16 @@
 import { z } from "zod";
+export const TEMPLATE_VERSION = "2026-09-28.v2-full";
+export const detailedDefaults = {
+  discount: 0,
+  discountDay: 5,
+  insuranceSum: 150000,
+  inspectionMonths: 6,
+  returnTime: "18:00",
+  petsAllowed: false,
+  smokingAllowed: false,
+  spareKeys: false,
+  notarialConsent: true,
+};
 const text = z.string().trim().min(1, "Uzupełnij wymagane pole.").max(250);
 const optional = z.string().trim().max(2000).default("");
 export const propertySchema = z.object({
@@ -48,8 +60,44 @@ export const termsSchema = z
     conditionDeadline: date,
     signature: z.enum(["qes", "ses"]),
     insurance: z.boolean().default(false),
+    discount: z.number().min(0).max(1000000).default(detailedDefaults.discount),
+    discountDay: z
+      .number()
+      .int()
+      .min(1)
+      .max(28)
+      .default(detailedDefaults.discountDay),
+    insuranceSum: z
+      .number()
+      .positive()
+      .max(10000000)
+      .default(detailedDefaults.insuranceSum),
+    inspectionMonths: z
+      .number()
+      .int()
+      .min(1)
+      .max(24)
+      .default(detailedDefaults.inspectionMonths),
+    returnTime: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Godzina zwrotu: HH:MM")
+      .default(detailedDefaults.returnTime),
+    petsAllowed: z.boolean().default(detailedDefaults.petsAllowed),
+    smokingAllowed: z.boolean().default(detailedDefaults.smokingAllowed),
+    spareKeys: z.boolean().default(detailedDefaults.spareKeys),
+    notarialConsent: z.boolean().default(detailedDefaults.notarialConsent),
   })
   .superRefine((v, ctx) => {
+    if (
+      v.discount >= v.rent ||
+      (v.discount > 0 && v.discountDay > v.paymentDay)
+    )
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "Rabat musi być mniejszy od czynszu, a jego termin nie może wypadać po dniu płatności.",
+        path: ["discount"],
+      });
     if (v.end < v.start)
       ctx.addIssue({
         code: "custom",
@@ -111,6 +159,19 @@ export const termsSchema = z
 export type Property = z.infer<typeof propertySchema>;
 export type Person = z.infer<typeof personSchema>;
 export type Terms = z.infer<typeof termsSchema>;
+export const agreementTemplateSchema = z.object({
+  id: z.string().max(100),
+  name: text,
+  kind: z.enum(["ordinary", "occasional"]),
+  body: z
+    .string()
+    .trim()
+    .min(100, "Wpisz treść wzoru (co najmniej 100 znaków).")
+    .max(65000),
+});
+export type AgreementTemplate = z.infer<typeof agreementTemplateSchema> & {
+  updatedAt: string;
+};
 export type Contract = {
   id: string;
   number: string;
@@ -124,12 +185,15 @@ export type Contract = {
   checklist: Record<string, boolean>;
   demo: boolean;
   renewalOf?: string;
+  templateVersion?: string;
+  templateSnapshot?: AgreementTemplate;
 };
 export type Workspace = {
   properties: Property[];
   people: Person[];
   contracts: Contract[];
   version: number;
+  templates?: AgreementTemplate[];
 };
 export const money = (v: number) =>
   new Intl.NumberFormat("pl-PL", {
@@ -233,6 +297,7 @@ export function seed(): Workspace {
     },
   ];
   const terms: Terms = {
+    ...detailedDefaults,
     kind: "ordinary",
     start: rel(-6),
     end: rel(6, 0),
@@ -268,6 +333,7 @@ export function seed(): Workspace {
       ],
       checklist: {},
       demo: true,
+      templateVersion: TEMPLATE_VERSION,
     },
     {
       id: "c2",
@@ -295,6 +361,7 @@ export function seed(): Workspace {
       ],
       checklist: {},
       demo: true,
+      templateVersion: TEMPLATE_VERSION,
     },
     {
       id: "c3",
@@ -305,6 +372,12 @@ export function seed(): Workspace {
       terms: {
         ...terms,
         start: rel(1),
+        kind: "occasional",
+        signedDate: today(),
+        conditionDeadline: rel(1),
+        alternativeAddress: "ul. Fikcyjna 20/1, 00-000 Miasto Demo",
+        alternativeOwner: "Patrycja Demonstracyjna",
+        insurance: true,
         handover: rel(1),
         end: rel(13, 0),
         rent: 4100,
@@ -316,7 +389,8 @@ export function seed(): Workspace {
       events: [{ date: today(), text: "Utworzono przykładowy szkic umowy." }],
       checklist: {},
       demo: true,
+      templateVersion: TEMPLATE_VERSION,
     },
   ];
-  return { properties, people, contracts, version: 0 };
+  return { properties, people, contracts, templates: [], version: 0 };
 }

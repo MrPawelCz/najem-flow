@@ -15,7 +15,7 @@ export async function readJson(request: Request) {
   if (!request.headers.get("content-type")?.startsWith("application/json"))
     throw new Error("Wymagany format JSON.");
   const body = await request.text();
-  if (body.length > 50000) throw new Error("Żądanie jest zbyt duże.");
+  if (body.length > 100000) throw new Error("Żądanie jest zbyt duże.");
   return JSON.parse(body);
 }
 export function failure(e: unknown) {
@@ -23,7 +23,7 @@ export function failure(e: unknown) {
     return json({ error: e.issues.map((i) => i.message).join(" ") }, 400);
   const known =
     e instanceof Error &&
-    /^(Wybierz|Najem|Nie |Ten |Najpierw|Po |Można|Zakończonego|Osiągnięto|Dane |Niedozwolone|Wymagany|Żądanie)/.test(
+    /^(Wybierz|Najem|Nie |Nieznane|Nieprawidłowe|Ten |Najpierw|Po |Można|Zakończonego|Osiągnięto|Dane |Niedozwolone|Wymagany|Żądanie)/.test(
       e.message,
     );
   if (!known)

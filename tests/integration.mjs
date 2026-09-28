@@ -5,11 +5,15 @@ assert.match(
   /^http:\/\/(127\.0\.0\.1|localhost):\d+$/,
   "Integration tests only run against loopback.",
 );
-const login = await fetch(origin + "/signin-with-chatgpt?return_to=/app", {
-  redirect: "manual",
+const login = await fetch(origin + "/api/session", {
+  method: "POST",
+  headers: { "Content-Type": "application/json", Origin: origin },
+  body: JSON.stringify({ username: "admin", password: "admin" }),
 });
 const cookie = login.headers.get("set-cookie")?.split(";")[0];
-assert.ok(cookie, "Local test login");
+assert.ok(cookie, "Admin demo login");
+assert.match(login.headers.get("set-cookie"), /HttpOnly/i);
+assert.match(login.headers.get("set-cookie"), /SameSite=Lax/i);
 async function request(path, body, authenticated = true) {
   const r = await fetch(origin + path, {
     method: body ? "POST" : "GET",
@@ -33,6 +37,22 @@ let {
   body: { state },
 } = await request("/api/workspace", { action: "initialize" });
 assert.ok(state.properties.length);
+assert.equal(
+  (
+    await request(
+      "/api/session",
+      { username: "admin", password: "wrong" },
+      false,
+    )
+  ).status,
+  401,
+  "Wrong password",
+);
+assert.equal(
+  (await request("/api/session", {}, false)).status,
+  401,
+  "Anonymous cannot initialize admin",
+);
 async function action(a) {
   const r = await request("/api/workspace", { ...a, version: state.version });
   assert.equal(r.status, 200, JSON.stringify(r.body));
@@ -58,6 +78,78 @@ const base = {
   ownerId: state.people.find((p) => p.role === "owner").id,
   tenantId: state.people.find((p) => p.role === "tenant").id,
 };
+const templateBody =
+  "Umowa własna\n\n§ 1. Strony i lokal\nWynajmujący {{wynajmujacy}}, najemca {{najemca}}, lokal {{adres_lokalu}}. Czynsz {{czynsz}}, okres {{poczatek_najmu}} do {{koniec_najmu}}.\n\n§ 2. Uzgodnienia\nDodatkowe uzgodnienie wersji PIERWSZEJ.";
+await action({
+  action: "template",
+  data: {
+    id: "",
+    name: "Test własnego wzoru",
+    kind: "ordinary",
+    body: templateBody,
+  },
+});
+const template = state.templates.at(-1);
+const { contractId: customId } = await action({
+  ...base,
+  terms: ordinary,
+  templateId: template.id,
+});
+assert.equal(
+  state.contracts.find((c) => c.id === customId).templateSnapshot.body,
+  templateBody,
+);
+await action({ action: "owner-sign", id: customId });
+await action({
+  action: "template",
+  data: { ...template, body: templateBody.replace("PIERWSZEJ", "DRUGIEJ") },
+});
+assert.equal(
+  state.contracts.find((c) => c.id === customId).templateSnapshot.body,
+  templateBody,
+  "Template edits must not rewrite saved contracts",
+);
+assert.equal(
+  (
+    await request("/api/workspace", {
+      ...base,
+      terms: {
+        ...ordinary,
+        kind: "occasional",
+        signature: "qes",
+        alternativeAddress: "Fikcyjna",
+        alternativeOwner: "Testowa",
+      },
+      templateId: template.id,
+      version: state.version,
+    })
+  ).status,
+  400,
+  "Wrong rental type rejected",
+);
+assert.equal(
+  (
+    await request("/api/workspace", {
+      action: "template",
+      data: { ...template, body: templateBody + " {{unknown}}" },
+      version: state.version,
+    })
+  ).status,
+  400,
+  "Unknown template fields rejected",
+);
+const login2 = await fetch(origin + "/api/session", {
+  method: "POST",
+  headers: { "Content-Type": "application/json", Origin: origin },
+  body: JSON.stringify({ username: "admin", password: "admin" }),
+});
+const cookie2 = login2.headers.get("set-cookie")?.split(";")[0];
+assert.notEqual(cookie2, cookie, "Sessions have independent tokens");
+assert.deepEqual(
+  (await login2.json()).state,
+  state,
+  "Both browsers see the shared admin workspace",
+);
 for (const kind of ["ordinary", "occasional"]) {
   const terms =
     kind === "ordinary"
@@ -84,6 +176,11 @@ for (const kind of ["ordinary", "occasional"]) {
   const get = await request("/api" + signingPath, undefined, false);
   assert.equal(get.status, 200);
   assert.equal(get.body.contract.terms.kind, kind);
+  assert.deepEqual(
+    Object.keys(get.body),
+    ["contract", "expiresAt"],
+    "Tenant link exposes only its contract and expiry",
+  );
   const refused = await request(
     "/api" + signingPath,
     { acceptDemo: false },
@@ -166,6 +263,19 @@ assert.equal(
   (await request("/api" + revoked, undefined, false)).status,
   404,
   "Cancelled invitation denied",
+);
+const logout = await request("/api/session", { action: "logout" });
+assert.equal(logout.status, 200);
+assert.equal(
+  (await request("/api/workspace")).status,
+  401,
+  "Logout invalidates server session",
+);
+assert.equal(
+  (await fetch(origin + "/api/workspace", { headers: { cookie: cookie2 } }))
+    .status,
+  200,
+  "Second admin session remains valid",
 );
 console.log(
   "PASS: ordinary and occasional lifecycle, persistence, immutable snapshots, idempotency, invalid data, auth, ownership, CSRF, optimistic concurrency, token revocation.",
